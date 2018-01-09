@@ -13,11 +13,11 @@ from PyQt5.QtWidgets import (QApplication, QFileDialog, QGraphicsScene, QMessage
 from PyQt5.QtCore import Qt, QDir, QRectF, pyqtSignal
 from PyQt5.QtGui import QPixmap, QImage
 
-# v1 first deployment
-# v2 rot90
-# v3 Added positions in real space for each item and the possibility to compute the distance between pics
+# v1 first deployment.
+# v2 rot90.
+# v3 Added positions in real space for each item and the possibility to compute the distance between pics.
 # v4 Improved the save and open project features.
-# v5 Added check for data introduced at qlineedits
+# v5 We have to get rid of scroll bars when exporting.
 
 globalversion = '1.5'
 
@@ -72,7 +72,7 @@ class MosaicApp(QtWidgets.QMainWindow, MosaicDesign.Ui_MainWindow):
         self.setupUi(self)  # This is defined in design file automatically
 
         self.scene = QGraphicsScene(self)
-        self.scene.setSceneRect(0, 0, 1250, 1100)
+        self.scene.setSceneRect(0, 0, 850, 750)
 
         self.graphicsView.keyPressEvent = self.keyPressEvent
 
@@ -249,7 +249,13 @@ class MosaicApp(QtWidgets.QMainWindow, MosaicDesign.Ui_MainWindow):
                 # print self.text
                 # print pics.pos()
 
+    def resetViewingZoom(self):
+        self.graphicsView.resetTransform()
+        self.graphicsView.fitInView(0, 0, 850, 750, Qt.KeepAspectRatio)
+        # QtWidgets.QScrollBar()
+
     def exportScene(self):
+        self.resetViewingZoom()
         exportName = QtWidgets.QFileDialog.getSaveFileName(self, "Export File", QDir.homePath(),
                                                            "Image Files (*.tiff)")  # *.png, *.jpg, *.bmp,
         if exportName and exportName[0] is not u'':
@@ -345,16 +351,14 @@ class MosaicApp(QtWidgets.QMainWindow, MosaicDesign.Ui_MainWindow):
                     if ext == "jpg" or ext == "png" or ext == "bmp" or ext == "tif" or ext == "tiff":
                         itemToLoad = QtGui.QPixmap(findirect, "24")
                     elif ext == "txt" or ext == "ssv" or ext == "dat":
-                        dataImage = np.genfromtxt(findirect, dtype=np.float32)
-                        dataImage -= dataImage.min()
-                        dataImage /= dataImage.max()
-                        dataImage *= 255
-                        dataImage = dataImage.astype(np.uint8)
-                        bytesPerLine = 1 * dataImage.shape[1];
-                        preitemToLoad = QImage(dataImage.data, dataImage.shape[1], dataImage.shape[0], bytesPerLine,
-                                            QImage.Format_Grayscale8)
-                        itemToLoad = QPixmap.fromImage(preitemToLoad)
-
+                        predataImage = np.genfromtxt(findirect, dtype=np.float32)
+                        dataImage = np.rot90(predataImage, k=1)  # TwinMic specific rotation
+                        tmpfn = '/tmp/mosaicSketch.%s.png' % os.getpid()  # temporary - and not unique name
+                        temp = open(tmpfn, 'w+b')
+                        misc.imsave(temp.name, dataImage)
+                        itemToLoad = QPixmap(temp.name)
+                        temp.close()
+                        os.remove(tmpfn)
                     self.item_i.append(MovablePixmapItem(itemToLoad))
                     self.item_i[-1].setOpacity(self.opacity)
                     self.scene.addItem(self.item_i[-1])
@@ -383,7 +387,7 @@ class MosaicApp(QtWidgets.QMainWindow, MosaicDesign.Ui_MainWindow):
 
     def open(self):
         fileName = QFileDialog.getOpenFileNames(self, "Import Image/Data Files", QDir.homePath(),
-                                                "Image/Data Files (*.png *.jpg *.bmp *.tif *.tiff *.txt *.ssv *.dat)")
+                                                "Image/Data Files (*.png *.jpg *.bmp *.tif *.tiff *.ssv *.dat)")
         self.getParameters()
         i = 1
         for o in range(0, len(fileName[0])):
@@ -398,7 +402,7 @@ class MosaicApp(QtWidgets.QMainWindow, MosaicDesign.Ui_MainWindow):
                 if ext == "jpg" or ext == "png" or ext == "bmp" or ext == "tif":
                     i += 1
                     itemToLoad = QtGui.QPixmap(fileName[0][o], "24")
-                elif ext == "txt" or ext == "ssv" or ext == "dat":
+                elif ext == "ssv" or ext == "dat":
                     i += 1
                     predataImage = np.genfromtxt(self.picName[-1], dtype=np.float32)
                     dataImage = np.rot90(predataImage, k=1) # TwinMic specific rotation
@@ -518,6 +522,8 @@ class MosaicApp(QtWidgets.QMainWindow, MosaicDesign.Ui_MainWindow):
                                     "Its seems that you have entered a non valid input for the off set(y)",
                                     QMessageBox.Ok)
         if QLineEdit.text(self.lineEdit_3) != "" and QLineEdit.text(self.lineEdit_4) != "":
+            # self.secondinput[0] = QLineEdit.text(self.lineEdit_3)
+            # self.secondinput[1] = QLineEdit.text(self.lineEdit_4)
             try:
                 self.secondinput[0] = float(QLineEdit.text(self.lineEdit_3))  # and float(QLineEdit.text(self.lineEdit_3)) != 0
             except ValueError:
